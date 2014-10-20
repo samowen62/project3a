@@ -73,7 +73,7 @@ int Mem_Init(int sizeOfRegion)
   if (MAP_FAILED == space_ptr)
   {
     fprintf(stderr,"Error:mem.c: mmap cannot allocate space\n");
-    allocated_once = 0;
+   // allocated_once = 0;
     return -1;
   }
   
@@ -103,7 +103,7 @@ void* Mem_Alloc(int size)
 
 	block_header* temp = list_head;
 	block_header* addr;
-	int length; 
+	int mem_left; 
 	int h_size = (int)sizeof(block_header);
 	void* ret;
  	
@@ -115,10 +115,10 @@ void* Mem_Alloc(int size)
 		// size of new free block
 		if ( (mem_left > 0) && !(temp->size_status & 1)) {
 			temp->size_status = size + 1;
-			ret = (void *) ((int)temp + h_size);
+			ret = (void *) (temp + h_size);
 			addr = temp->next;
 			// makes next free block
-			temp->next = (block_header *)((int)ret + size);
+			temp->next = (block_header *)(ret + size);
 			temp->next->size_status = mem_left;
 			temp->next->next = addr;
 			return ret;
@@ -129,7 +129,7 @@ void* Mem_Alloc(int size)
 			
 			// to show that block is allocated
 			temp->size_status += 1;
-			return (void *)((int)temp + h_size);
+			return (void *)(temp + h_size);
 		}
 		temp = temp->next;
 	}	
@@ -156,7 +156,7 @@ int Mem_Free(void *ptr)
 	int h_size = (int)sizeof(block_header);
 
 	// looks if first block is the one we're trying to free
-	if ((int)temp + h_size == (int)ptr)
+	if (temp + h_size == ptr)
  	{
 		if (temp->next != NULL) {
 			int n_size = temp->next->size_status;
@@ -173,7 +173,7 @@ int Mem_Free(void *ptr)
 	}
 
 	while (temp != NULL) {
-		if ((temp->next != NULL) && ((int)(temp->next) + h_size == (int)ptr))
+		if ((temp->next != NULL) && ((temp->next) + h_size == ptr))
 		// next block is it
 		{
 			if(!(temp->size_status & 1))
@@ -204,6 +204,14 @@ int Mem_Free(void *ptr)
 	}
 	return -1;
 }
+
+
+int
+Mem_Available(){
+
+  return 0;
+} 
+
 
 /* Function to be used for debug */
 /* Prints out a list of all the blocks along with the followinginforormation for each block */
