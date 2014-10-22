@@ -20,7 +20,6 @@ typedef struct block_hd{
 
   /* For free block, block size = size_status */
   /* For an allocated block, block size = size_status - 1 */
-
   /* The size of the block stored here is not the real size of the block */
   /* the size stored here = (size of block) - (size of header) */
   int size_status;
@@ -30,7 +29,7 @@ typedef struct block_hd{
 /* Global variable - This will always point to the first block */
 /* ie, the block with the lowest address */
 block_header* list_head = NULL;
-
+static int allocated_once = 0;
 
 /* Function used to Initialize the memory allocator */
 /* Not intended to be called more than once by a program */
@@ -43,13 +42,12 @@ int Mem_Init(int sizeOfRegion)
   int fd;
   int alloc_size;
   void* space_ptr;
-  //static int allocated_once = 0;
   
- /* if(0 != allocated_once)
+ if(0 != allocated_once)
   {
     fprintf(stderr,"Error:mem.c: Mem_Init has allocated space during a previous call\n");
     return -1;
-  }*/
+  }
   if(sizeOfRegion <= 0)
   {
     fprintf(stderr,"Error:mem.c: Requested block size is not positive\n");
@@ -73,7 +71,7 @@ int Mem_Init(int sizeOfRegion)
   if (MAP_FAILED == space_ptr)
   {
     fprintf(stderr,"Error:mem.c: mmap cannot allocate space\n");
-   // allocated_once = 0;
+   allocated_once = 0;
     return -1;
   }
   
