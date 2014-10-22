@@ -75,7 +75,7 @@ int Mem_Init(int sizeOfRegion)
     return -1;
   }
   
-  //allocated_once = 1;
+  allocated_once = 1;
   
   /* To begin with, there is only one big, free block */
   list_head = (block_header*)space_ptr;

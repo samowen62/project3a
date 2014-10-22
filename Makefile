@@ -7,4 +7,4 @@ mem: mem.c mem.h
 
 
 clean:
-	rm -rf mem.o libmem.so
+	rm -rf mem.o libmem1.so libmem2.so libmem3.so
