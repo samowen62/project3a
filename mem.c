@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 #include <string.h>
+#include <pthread.h>
 #include "mem.h"
 
 /* this structure serves as the header for each block */
@@ -22,7 +23,7 @@ typedef struct block_hd{
   /* For an allocated block, block size = size_status - 1 */
   /* The size of the block stored here is not the real size of the block */
   /* the size stored here = (size of block) - (size of header) */
-  int size_status;
+  short int size_status;
 
 }block_header;
 
@@ -30,6 +31,8 @@ typedef struct block_hd{
 /* ie, the block with the lowest address */
 block_header* list_head = NULL;
 static int allocated_once = 0;
+
+pthread_mutex_t lock;
 
 /* Function used to Initialize the memory allocator */
 /* Not intended to be called more than once by a program */
@@ -40,7 +43,7 @@ int Mem_Init(int sizeOfRegion)
   int pagesize;
   int padsize;
   int fd;
-  int alloc_size;
+  short int alloc_size;
   void* space_ptr;
   
  if(0 != allocated_once)
@@ -53,6 +56,11 @@ int Mem_Init(int sizeOfRegion)
     fprintf(stderr,"Error:mem.c: Requested block size is not positive\n");
     return -1;
   }
+  if (pthread_mutex_init(&lock, NULL) != 0)
+  {
+    fprintf(stderr,"Error:mutex init failed\n");
+    return -1;
+  }	
 
   pagesize = getpagesize();
 
@@ -101,13 +109,14 @@ void* Mem_Alloc(int size)
 
 	block_header* temp = list_head;
 	block_header* addr;
-	int mem_left; 
+	short int mem_left; 
 	int h_size = (int)sizeof(block_header);
 	void* ret;
  	
 	if ((size % 8) != 0)
 		size = size - (size % 8) + 8;
 	
+	pthread_mutex_lock(&lock);
 	while (temp != NULL) {
 		mem_left = temp->size_status - size - h_size; 
 		// size of new free block
@@ -119,6 +128,7 @@ void* Mem_Alloc(int size)
 			temp->next = (block_header *)(ret + size);
 			temp->next->size_status = mem_left;
 			temp->next->next = addr;
+			pthread_mutex_unlock(&lock);
 			return ret;
 		}
 		else if((mem_left >= -h_size)&& !(temp->size_status & 1)){
@@ -127,10 +137,12 @@ void* Mem_Alloc(int size)
 			
 			// to show that block is allocated
 			temp->size_status += 1;
+			pthread_mutex_unlock(&lock);
 			return (void *)(temp + h_size);
 		}
 		temp = temp->next;
-	}	
+	}
+	pthread_mutex_unlock(&lock);	
 	return NULL;
 }
 
@@ -154,6 +166,7 @@ int Mem_Free(void *ptr)
 	int h_size = (int)sizeof(block_header);
 
 	// looks if first block is the one we're trying to free
+	pthread_mutex_lock(&lock);
 	if (temp + h_size == ptr)
  	{
 		if (temp->next != NULL) {
@@ -167,6 +180,7 @@ int Mem_Free(void *ptr)
 			}
 		}
 		temp->size_status--;
+		pthread_mutex_unlock(&lock);
 		return 0;
 	}
 
@@ -196,18 +210,28 @@ int Mem_Free(void *ptr)
 			}
 			// free it
 			temp->size_status--;
+			pthread_mutex_unlock(&lock);
 			return 0;
 		}
 		temp = temp->next;
 	}
+	pthread_mutex_unlock(&lock);
 	return -1;
 }
 
 
 int
 Mem_Available(){
+	int most = 0;
+	block_header* temp = list_head;
 
-  return 0;
+	while (temp != NULL) {
+		if(!(temp->size_status & 1))
+			if (temp->size_status >= most)
+				most = temp->size_status;
+	}
+
+	return most;
 } 
 
 
@@ -220,59 +244,16 @@ Mem_Available(){
 /* Size     : Size of the block (excluding the header) */
 /* t_Size   : Size of the block (including the header) */
 /* t_Begin  : Address of the first byte in the block (this is where the header starts) */
-void Mem_Dump()
-{
-  int counter;
-  block_header* current = NULL;
-  char* t_Begin = NULL;
-  char* Begin = NULL;
-  int Size;
-  int t_Size;
-  char* End = NULL;
-  int free_size;
-  int busy_size;
-  int total_size;
-  char status[5];
+void Mem_Dump() {
+	block_header* temp = list_head;
 
-  free_size = 0;
-  busy_size = 0;
-  total_size = 0;
-  current = list_head;
-  counter = 1;
-  fprintf(stdout,"************************************Block list***********************************\n");
-  fprintf(stdout,"No.\tStatus\tBegin\t\tEnd\t\tSize\tt_Size\tt_Begin\n");
-  fprintf(stdout,"---------------------------------------------------------------------------------\n");
-  while(NULL != current)
-  {
-    t_Begin = (char*)current;
-    Begin = t_Begin + (int)sizeof(block_header);
-    Size = current->size_status;
-    strcpy(status,"Free");
-    if(Size & 1) /*LSB = 1 => busy block*/
-    {
-      strcpy(status,"Busy");
-      Size = Size - 1; /*Minus one for ignoring status in busy block*/
-      t_Size = Size + (int)sizeof(block_header);
-      busy_size = busy_size + t_Size;
-    }
-    else
-    {
-      t_Size = Size + (int)sizeof(block_header);
-      free_size = free_size + t_Size;
-    }
-    End = Begin + Size;
-    fprintf(stdout,"%d\t%s\t0x%08lx\t0x%08lx\t%d\t%d\t0x%08lx\n",counter,status,(unsigned long int)Begin,(unsigned long int)End,Size,t_Size,(unsigned long int)t_Begin);
-    total_size = total_size + t_Size;
-    current = current->next;
-    counter = counter + 1;
-  }
-  fprintf(stdout,"---------------------------------------------------------------------------------\n");
-  fprintf(stdout,"*********************************************************************************\n");
+	while (temp != NULL){
+		if (temp->size_status & 1) {//not free
+			fprintf(stdout,"Allocated\t%p\tsize:\t%d",temp,temp->size_status);
+		}
+		else
+			fprintf(stdout,"Allocated\t%p\tsize:\t%d",temp,temp->size_status);
 
-  fprintf(stdout,"Total busy size = %d\n",busy_size);
-  fprintf(stdout,"Total free size = %d\n",free_size);
-  fprintf(stdout,"Total size = %d\n",busy_size+free_size);
-  fprintf(stdout,"*********************************************************************************\n");
-  fflush(stdout);
-  return;
+	}	
+	return;
 }
