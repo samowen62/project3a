@@ -1,0 +1,10 @@
+Name: Philip Tibbetts
+CSL-ID:tibbetts
+Name: Sam Owen
+CSL-ID:owen
+
+Linux-Implementation Details:
+
+In mem_init, we allocate the needed space for our memory allocations with mmap. Then in mem_alloc, we do the necessary calculations (mod 8, consider head) and do the arithmetics with nodes. In mem_free, we free the allocated part that we are directed to. Then we check if the previous section is allocated, if yes, we coalesce. Same with the section after the freed part. We suspect that the header size (which might be too large) is leading to failed tests. Mem_Available tells us how much more space can be allocated via mem_alloc and mem_dump was used for debugging.
+
+
